@@ -1,0 +1,80 @@
+CREATE TABLE almart  
+(  
+    date_key date,  
+    hour_key smallint,  
+    client_key integer,  
+    item_key integer,  
+    account integer,  
+    expense numeric  
+);  
+
+
+        2.创建多个分区表    每个分区表必须继承自主表，并且正常情况下都不要为这些分区表添加任何新的列。
+[sql]  view plain  copy
+
+CREATE TABLE almart_2015_12_10 () inherits (almart);  
+CREATE TABLE almart_2015_12_11 () inherits (almart);  
+CREATE TABLE almart_2015_12_12 () inherits (almart);  
+CREATE TABLE almart_2015_12_13 () inherits (almart);  
+
+
+         3. 为分区表添加限制 。这些限制决定了该表所能允许保存的数据集范围。这里必须保证各个分区表之间的限制不能有重叠。
+[sql]  view plain  copy
+
+ALTER TABLE almart_2015_12_10  
+ADD CONSTRAINT almart_2015_12_10_check_date_key  
+CHECK (date_Key = '2015-12-10'::date);  
+ALTER TABLE almart_2015_12_11  
+ADD CONSTRAINT almart_2015_12_10_check_date_key  
+CHECK (date_Key = '2015-12-11'::date);  
+ALTER TABLE almart_2015_12_12  
+ADD CONSTRAINT almart_2015_12_10_check_date_key  
+CHECK (date_Key = '2015-12-12'::date);  
+ALTER TABLE almart_2015_12_13  
+ADD CONSTRAINT almart_2015_12_10_check_date_key  
+CHECK (date_Key = '2015-12-13'::date);  
+
+         4. 为每一个分区表，在主要的列上创建索引 。该索引并不是严格必须创建的，但在大部分场景下，它都非常有用。
+[sql]  view plain  copy
+
+CREATE INDEX almart_date_key_2015_12_10  
+ON almart_2015_12_10 (date_key);  
+CREATE INDEX almart_date_key_2015_12_11  
+ON almart_2015_12_11 (date_key);  
+CREATE INDEX almart_date_key_2015_12_12  
+ON almart_2015_12_12 (date_key);  
+CREATE INDEX almart_date_key_2015_12_13  
+ON almart_2015_12_13 (date_key);  
+
+      5. 定义一个trigger或者rule把对主表的数据插入操作重定向到对应的分区表 。
+
+[sql]  view plain  copy
+
+--创建分区函数  
+CREATE OR REPLACE FUNCTION almart_partition_trigger()  
+RETURNS TRIGGER AS $$  
+BEGIN  
+    IF NEW.date_key = DATE '2015-12-10'  
+    THEN  
+        INSERT INTO almart_2015_12_10 VALUES (NEW.*);  
+    ELSIF NEW.date_key = DATE '2015-12-11'  
+    THEN  
+        INSERT INTO almart_2015_12_11 VALUES (NEW.*);  
+    ELSIF NEW.date_key = DATE '2015-12-12'  
+    THEN  
+        INSERT INTO almart_2015_12_12 VALUES (NEW.*);  
+    ELSIF NEW.date_key = DATE '2015-12-13'  
+    THEN  
+        INSERT INTO almart_2015_12_13 VALUES (NEW.*);  
+    ELSIF NEW.date_key = DATE '2015-12-14'  
+    THEN  
+        INSERT INTO almart_2015_12_14 VALUES (NEW.*);  
+    END IF;  
+    RETURN NULL;  
+END;  
+$$  
+LANGUAGE plpgsql;  
+--挂载分区Trigger  
+CREATE TRIGGER insert_almart_partition_trigger  
+BEFORE INSERT ON almart  
+FOR EACH ROW EXECUTE PROCEDURE almart_partition_trigger();  
